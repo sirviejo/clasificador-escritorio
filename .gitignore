@@ -1,0 +1,7 @@
+.env
+.bin/
+informes/
+movimientos.jsonl
+watcher.log
+__pycache__/
+.DS_Store
