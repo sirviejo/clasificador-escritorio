@@ -1,0 +1,99 @@
+{
+  "folders": {
+    "screenshots": "Schermate",
+    "review": "Da_Rivedere",
+    "to_delete": "Da_Eliminare",
+    "finance": "Finanze_Fatturazione",
+    "marketing": "Marketing_Report",
+    "hr": "HR_Timesheet",
+    "documents": "Documenti",
+    "images": "Immagini",
+    "videos": "Video",
+    "code": "Codice",
+    "installers": "Installer",
+    "personal": "Personale"
+  },
+  "subfolders": {
+    "screenshots": {
+      "work": "Lavoro",
+      "code_errors": "Codice_Errori",
+      "design_ui": "Design_UI",
+      "finance_payments": "Finanze_Pagamenti",
+      "conversations": "Conversazioni",
+      "maps_places": "Mappe_Luoghi",
+      "personal": "Personale"
+    },
+    "finance": {
+      "invoices_issued": "Fatture_Emesse",
+      "invoices_received": "Fatture_Ricevute",
+      "receipts_expenses": "Ricevute_Spese",
+      "bank_cards": "Banca_Carte",
+      "taxes": "Tasse"
+    },
+    "marketing": {
+      "seo": "SEO",
+      "ads": "Ads",
+      "crm_leads": "CRM_Lead",
+      "social_media": "Social_Media",
+      "analytics": "Analytics"
+    },
+    "hr": {
+      "resumes": "CV",
+      "contracts": "Contratti",
+      "timesheets": "Timesheet",
+      "onboarding": "Onboarding"
+    },
+    "documents": {
+      "proposals_contracts": "Proposte_Contratti",
+      "presentations": "Presentazioni",
+      "spreadsheets": "Fogli_di_calcolo",
+      "notes_drafts": "Note_Bozze"
+    },
+    "images": {
+      "photos": "Foto",
+      "designs_mockups": "Design_Mockup",
+      "logos_brand": "Loghi_Brand",
+      "ai_generated": "Generate_IA",
+      "stock": "Stock"
+    },
+    "code": {
+      "projects": "Progetti",
+      "scripts": "Script",
+      "data_config": "Dati_Config"
+    },
+    "personal": {
+      "identity": "Identita",
+      "travel": "Viaggi",
+      "health": "Salute",
+      "paperwork": "Pratiche"
+    }
+  },
+  "verdicts": {
+    "keep": "conservare",
+    "file": "archiviare",
+    "delete": "eliminare"
+  },
+  "messages": {
+    "screenshots": "Schermate: %d",
+    "screenshot_note": "schermata",
+    "analyzing": "Analisi di %d file…",
+    "no_key": "Manca TYPESAFE_API_KEY (creane una su https://console.typesafe.ai/ e salvala in\n%s come TYPESAFE_API_KEY=...). Vengono spostate solo le schermate.",
+    "compiling": "Compilazione di extraer_texto (solo la prima volta)…",
+    "compile_failed": "  compilazione non riuscita, continuo senza OCR: %s",
+    "no_connection": "Impossibile connettersi a TypeSafe: %s",
+    "unsure": "incerto",
+    "importance": "importanza",
+    "reason_duplicate": "duplicato esatto di %s",
+    "reason_important": "importante",
+    "reason_sensitive": "dati sensibili",
+    "reason_replaceable": "sostituibile",
+    "reason_temporary": "temporaneo o di prova",
+    "reason_none": "nessun motivo per eliminare né per segnalare",
+    "summary": "Importanti (conservare): %d · Archiviati: %d · Eliminabili: %d (messi da parte in %s/, nulla viene eliminato automaticamente)",
+    "report": "Report: %s",
+    "nothing_to_undo": "Nessuno spostamento registrato.",
+    "undo_failed": "impossibile ripristinare: %s",
+    "undone": "Esecuzione %s annullata: %d file rimessi a posto.",
+    "bad_folder": "Errore: --folder deve essere una cartella della Scrivania."
+  }
+}

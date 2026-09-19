@@ -1,0 +1,99 @@
+{
+  "folders": {
+    "screenshots": "Screenshots",
+    "review": "To_Review",
+    "to_delete": "To_Delete",
+    "finance": "Finance_Invoicing",
+    "marketing": "Marketing_Reports",
+    "hr": "HR_Timesheets",
+    "documents": "Documents",
+    "images": "Images",
+    "videos": "Videos",
+    "code": "Code",
+    "installers": "Installers",
+    "personal": "Personal"
+  },
+  "subfolders": {
+    "screenshots": {
+      "work": "Work",
+      "code_errors": "Code_Errors",
+      "design_ui": "Design_UI",
+      "finance_payments": "Finance_Payments",
+      "conversations": "Conversations",
+      "maps_places": "Maps_Places",
+      "personal": "Personal"
+    },
+    "finance": {
+      "invoices_issued": "Invoices_Issued",
+      "invoices_received": "Invoices_Received",
+      "receipts_expenses": "Receipts_Expenses",
+      "bank_cards": "Bank_Cards",
+      "taxes": "Taxes"
+    },
+    "marketing": {
+      "seo": "SEO",
+      "ads": "Ads",
+      "crm_leads": "CRM_Leads",
+      "social_media": "Social_Media",
+      "analytics": "Analytics"
+    },
+    "hr": {
+      "resumes": "Resumes",
+      "contracts": "Contracts",
+      "timesheets": "Timesheets",
+      "onboarding": "Onboarding"
+    },
+    "documents": {
+      "proposals_contracts": "Proposals_Contracts",
+      "presentations": "Presentations",
+      "spreadsheets": "Spreadsheets",
+      "notes_drafts": "Notes_Drafts"
+    },
+    "images": {
+      "photos": "Photos",
+      "designs_mockups": "Designs_Mockups",
+      "logos_brand": "Logos_Brand",
+      "ai_generated": "AI_Generated",
+      "stock": "Stock"
+    },
+    "code": {
+      "projects": "Projects",
+      "scripts": "Scripts",
+      "data_config": "Data_Config"
+    },
+    "personal": {
+      "identity": "Identity",
+      "travel": "Travel",
+      "health": "Health",
+      "paperwork": "Paperwork"
+    }
+  },
+  "verdicts": {
+    "keep": "keep",
+    "file": "file",
+    "delete": "delete"
+  },
+  "messages": {
+    "screenshots": "Screenshots: %d",
+    "screenshot_note": "screenshot",
+    "analyzing": "Analyzing %d files…",
+    "no_key": "TYPESAFE_API_KEY is missing (create one at https://console.typesafe.ai/ and save it in\n%s as TYPESAFE_API_KEY=...). Only screenshots will be moved.",
+    "compiling": "Compiling extraer_texto (first time only)…",
+    "compile_failed": "  could not compile, continuing without OCR: %s",
+    "no_connection": "Could not connect to TypeSafe: %s",
+    "unsure": "unsure",
+    "importance": "importance",
+    "reason_duplicate": "exact duplicate of %s",
+    "reason_important": "important",
+    "reason_sensitive": "sensitive data",
+    "reason_replaceable": "replaceable",
+    "reason_temporary": "temporary or test file",
+    "reason_none": "no reason to delete or to flag",
+    "summary": "Important (keep): %d · Filed: %d · Can be deleted: %d (set aside in %s/, nothing is deleted automatically)",
+    "report": "Report: %s",
+    "nothing_to_undo": "No moves on record.",
+    "undo_failed": "could not restore: %s",
+    "undone": "Run %s reverted: %d files back in place.",
+    "bad_folder": "Error: --folder must be a folder inside the Desktop."
+  }
+}

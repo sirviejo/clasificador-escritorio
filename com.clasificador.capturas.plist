@@ -8,7 +8,7 @@
     <array>
         <string>/usr/bin/python3</string>
         <string>/Users/TU_USUARIO/Desktop/clasificador/clasificar.py</string>
-        <string>--solo-capturas</string>
+        <string>--screenshots-only</string>
     </array>
     <key>WatchPaths</key>
     <array>

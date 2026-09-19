@@ -1,35 +1,24 @@
 #!/usr/bin/env python3
 """
-clasificar.py — Clasificador del Escritorio con TypeSafe (Jev)
+clasificar.py — macOS Desktop file classifier built on TypeSafe (Jev)
 
-Para cada archivo decide:
-  · categoría      → carpeta destino (las capturas SIEMPRE van a Capturas/;
-                     eso lo decide el código, nunca el modelo)
-  · subcarpeta     → dentro de la carpeta destino
-  · importancia    → de descartable a "no se puede perder"
-  · datos sensibles→ contraseñas, datos bancarios, documentos de identidad…
-  · ¿se puede borrar? → reemplazable / temporal / duplicado exacto
+For every loose file it decides:
+  · folder       → destination (screenshots ALWAYS go to the screenshots folder;
+                   that rule is code, never the model)
+  · subfolder    → inside the destination folder
+  · importance   → from disposable to "cannot be lost"
+  · sensitive    → passwords, banking data, identity documents…
+  · deletable?   → replaceable / temporary / exact duplicate
 
-Nunca borra nada: los candidatos a borrar se apartan en Para_Borrar/ para que
-los revises. Cada corrida deja un informe CSV en informes/.
+It never deletes anything: deletion candidates are set aside in a "to delete"
+folder for you to review. Every run writes a CSV report to informes/.
 
-Uso:
-    python3 clasificar.py                  → clasifica y mueve
-    python3 clasificar.py --dry            → muestra qué haría, sin mover nada
-    python3 clasificar.py --con-contenido  → lee el archivo (OCR de imágenes, texto
-                                             de PDFs y documentos) y envía el inicio
-                                             a la API. Sin esto solo se envía el
-                                             nombre, y las capturas no se analizan.
-    python3 clasificar.py --carpeta Capturas → analiza los archivos sueltos de esa
-                                             carpeta en vez de los del Escritorio
-    python3 clasificar.py --limite 20      → procesa solo los primeros 20 archivos
-    python3 clasificar.py --solo-capturas  → solo mueve capturas (no usa la API)
-    python3 clasificar.py --deshacer       → revierte la última corrida
-
-Configuración: variables de entorno o archivo .env junto a este script
-(ver .env.example). Solo TYPESAFE_API_KEY es obligatoria.
+Folder names and messages come from locales/<lang>.json (en, es, fr, it).
+Run with --help for the options. Configuration: environment variables or a
+.env file next to this script (see .env.example).
 """
 
+import argparse
 import csv
 import hashlib
 import json
@@ -38,70 +27,46 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
-# ─── Configuración ────────────────────────────────────────────────────────────
+# ─── Configuration ────────────────────────────────────────────────────────────
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 DESKTOP = SCRIPT_DIR.parent
-CAPTURAS = "Capturas"
-NEEDS_REVIEW = "Needs_Review"
-PARA_BORRAR = "Para_Borrar"
+LOCALES = SCRIPT_DIR / "locales"
 LOG = SCRIPT_DIR / "movimientos.jsonl"
-INFORMES = SCRIPT_DIR / "informes"
+REPORTS = SCRIPT_DIR / "informes"
 OCR_SRC = SCRIPT_DIR / "extraer_texto.swift"
 OCR_BIN = SCRIPT_DIR / ".bin" / "extraer_texto"
 
 API_URL = "https://api.typesafe.ai/v1/systemone"
 MODEL = "jev-latest"
-BATCH_SIZE = 4           # archivos por request (todas sus preguntas van en paralelo)
-MIN_AGE_SECONDS = 10     # no tocar archivos que se están escribiendo
-CONTENT_CHARS = 1200     # cuánto texto del archivo ve el modelo
+BATCH_SIZE = 4           # files per request (all their questions run in parallel)
+MIN_AGE_SECONDS = 10     # leave files that are still being written alone
+CONTENT_CHARS = 1200     # how much of the file's text the model sees
 
-# Política (todo esto es código: se puede ajustar sin volver a consultar la API)
-MIN_CONFIDENCE = 0.8     # categoría: por debajo de esto → Needs_Review
-MIN_SUB_PROB = 0.5       # subcarpeta: es una preferencia inofensiva, alcanza con mayoría
-IMPORTANTE_DESDE = 2.0   # importancia (0–3) a partir de la cual se marca "conservar"
-SENSIBLE_DESDE = 0.7
-BORRABLE_IMPORTANCIA_MAX = 1.0
-BORRABLE_SENAL_MIN = 0.6  # prob. mínima de reemplazable o temporal (solo aparta, no borra)
+# Policy (plain code: tune it without calling the API again)
+MIN_CONFIDENCE = 0.8     # folder: below this → review folder
+MIN_SUB_PROB = 0.5       # subfolder: a harmless preference, a majority is enough
+IMPORTANT_FROM = 2.0     # importance (0–3) from which a file is flagged "keep"
+SENSITIVE_FROM = 0.7
+DELETABLE_MAX_IMPORTANCE = 1.0
+DELETABLE_MIN_SIGNAL = 0.6  # min prob. of replaceable or temporary (sets aside, never deletes)
 
-
-
-def load_env():
-    """Variables de entorno + archivo .env junto al script (que no se versiona)."""
-    env = {}
-    env_file = SCRIPT_DIR / ".env"
-    if env_file.exists():
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            if "=" in line and not line.strip().startswith("#"):
-                k, v = line.split("=", 1)
-                env[k.strip()] = v.strip().strip("'\"")
-    for k in ("TYPESAFE_API_KEY", "PROPIETARIO", "IGNORAR"):
-        if os.environ.get(k):
-            env[k] = os.environ[k]
-    return env
-
-
-ENV = load_env()
-ARGS = sys.argv[1:]
-DRY_RUN = "--dry" in ARGS
-SOLO_CAPTURAS = "--solo-capturas" in ARGS
-CON_CONTENIDO = "--con-contenido" in ARGS
-
+# macOS names screenshots in the system language; the xattr catches the rest
 SCREENSHOT_PREFIXES = (
-    "captura de pantalla", "grabación de pantalla", "grabacion de pantalla",
     "screenshot", "screen shot", "screen recording",
+    "captura de pantalla", "grabación de pantalla", "grabacion de pantalla",
+    "capture d’écran", "capture d'écran", "enregistrement de l’écran", "enregistrement de l'écran",
+    "schermata", "registrazione schermo",
 )
 SCREENSHOT_XATTR = "com.apple.metadata:kMDItemIsScreenCapture"
 
-# IGNORAR en .env: archivos o carpetas del Escritorio que el clasificador no toca
-IGNORAR = {n.strip() for n in ENV.get("IGNORAR", "").split(",") if n.strip()}
-SKIP_NAMES = {"desktop.ini"} | IGNORAR
 SKIP_SUFFIXES = {".crdownload", ".download", ".part", ".tmp"}
 TEXT_SUFFIXES = {".txt", ".md", ".csv", ".json", ".html", ".xml", ".py", ".js",
                  ".ts", ".sql", ".log", ".yaml", ".yml"}
@@ -109,144 +74,244 @@ OCR_SUFFIXES = {".png", ".jpg", ".jpeg", ".heic", ".tif", ".tiff", ".gif", ".bmp
                 ".webp", ".pdf"}
 TEXTUTIL_SUFFIXES = {".docx", ".doc", ".rtf", ".odt"}
 
-# Carpetas destino. Las carpetas que ya existen en el Escritorio y no están
-# acá se agregan solas como opciones (descritas por lo que contienen).
+# Everything the model reads is English and keyed by internal ids, so judgments
+# do not depend on the user's language. locales/*.json maps ids → folder names.
+SCREENSHOTS, REVIEW, TO_DELETE, OTHER, NO_SUBFOLDER = "screenshots", "review", "to_delete", "other", "none"
+DIR_PREFIX = "dir:"      # option key for a folder that already exists on disk
+
 CATEGORIES = {
-    "Finanzas_Facturacion": {
-        "what": "Facturas, recibos, invoices, resúmenes de tarjeta o banco, gastos, impuestos.",
-        "examples": ["INVOICE_0042_ACME.pdf", "recibo-hotel-viaje.pdf", "resumen de tarjeta visa.pdf"],
+    "finance": {
+        "what": "Invoices, receipts, bank or card statements, expenses, taxes.",
+        "examples": ["INVOICE_0042_ACME.pdf", "hotel-receipt-trip.pdf", "resumen de tarjeta visa.pdf"],
     },
-    "Marketing_Reportes": {
-        "what": "Reportes de campañas, SEO, Google Ads, HubSpot, analytics y exports de marketing.",
-        "examples": ["auditoria-SEO.html", "channel_performance.csv", "campaign report Q2.pdf"],
+    "marketing": {
+        "what": "Campaign reports, SEO, Google Ads, CRM exports, analytics and other marketing material.",
+        "examples": ["SEO-audit.html", "channel_performance.csv", "campaign report Q2.pdf"],
     },
-    "RRHH_Timesheets": {
-        "what": "Onboarding, currículums, contratos de contractors, timesheets y horas del equipo.",
+    "hr": {
+        "what": "Onboarding, resumes, contractor agreements, timesheets and team hours.",
     },
-    "Documentos": {
-        "what": "Documentos de trabajo generales (Word, PDF, presentaciones, planillas) que no son de finanzas, marketing ni RRHH.",
+    "documents": {
+        "what": "General work documents (Word, PDF, slides, spreadsheets) that are not finance, marketing or HR.",
     },
-    "Imagenes": {
-        "what": "Fotos, diseños, mockups, logos e imágenes generadas. Las capturas de pantalla NO van acá.",
+    "images": {
+        "what": "Photos, designs, mockups, logos and generated images. Screenshots do NOT go here.",
         "examples": ["logo-final.png", "mockup-home.png", "pexels-photo-123.jpg"],
     },
-    "Videos": {
-        "what": "Videos, grabaciones de reuniones y subtítulos.",
+    "videos": {
+        "what": "Videos, meeting recordings and subtitles.",
     },
-    "Codigo": {
-        "what": "Código fuente, scripts, proyectos comprimidos de código, archivos de configuración.",
-        "examples": ["mi-proyecto.zip", "deploy.sh", "schema.sql"],
+    "code": {
+        "what": "Source code, scripts, zipped code projects, configuration files.",
+        "examples": ["my-project.zip", "deploy.sh", "schema.sql"],
     },
-    "Instaladores": {
-        "what": "Instaladores y aplicaciones: .dmg, .pkg, .app, .exe.",
+    "installers": {
+        "what": "Installers and applications: .dmg, .pkg, .app, .exe.",
     },
-    "Personal": {
-        "what": "Documentos personales: DNI, pasaporte, viajes, vacaciones, trámites, notas propias.",
+    "personal": {
+        "what": "Personal documents: ID, passport, travel, holidays, paperwork, own notes.",
     },
-    "otro": {
-        "what": "Ninguna carpeta encaja claramente o el nombre no alcanza para decidir.",
+    OTHER: {
+        "what": "No folder clearly fits, or the available information is not enough to decide.",
     },
 }
 
-# Subcarpetas por carpeta. Las subcarpetas que ya existen en disco se suman solas.
 SUBFOLDERS = {
-    CAPTURAS: {
-        "Trabajo": "Herramientas de trabajo y de clientes: dashboards, CRM, reportes, anuncios, planillas, analytics, gestores de proyectos.",
-        "Codigo_Errores": "Terminal, editor de código, logs, consolas de desarrollador, mensajes de error técnicos, paneles de hosting o deploy.",
-        "Diseno_UI": "Interfaces, mockups, pantallas de apps o sitios web guardadas por su diseño o como referencia visual.",
-        "Finanzas_Pagos": "Comprobantes de pago o transferencia, facturas, home banking, checkouts, precios y suscripciones.",
-        "Conversaciones": "Chats, emails, Slack, WhatsApp, comentarios o mensajes entre personas.",
-        "Mapas_Lugares": "Mapas, direcciones, radios de distancia, propiedades o lugares.",
-        "Personal": "Asuntos personales: trámites, salud, viajes, compras propias, redes sociales.",
+    SCREENSHOTS: {
+        "work": "Work and client tools: dashboards, CRM, reports, ads, spreadsheets, analytics, project managers.",
+        "code_errors": "Terminal, code editor, logs, developer consoles, technical error messages, hosting or deploy panels.",
+        "design_ui": "Interfaces, mockups, app or website screens saved for their design or as visual reference.",
+        "finance_payments": "Payment or transfer confirmations, invoices, online banking, checkouts, prices and subscriptions.",
+        "conversations": "Chats, emails, Slack, WhatsApp, comments or messages between people.",
+        "maps_places": "Maps, directions, distance radiuses, properties or places.",
+        "personal": "Personal matters: paperwork, health, travel, own purchases, social media.",
     },
-    "Finanzas_Facturacion": {
-        "Facturas_Emitidas": "Facturas o invoices que el usuario%s emite a sus clientes." % (
-            " (%s)" % ENV["PROPIETARIO"] if ENV.get("PROPIETARIO") else ""),
-        "Facturas_Recibidas": "Facturas o invoices de proveedores y servicios que el usuario tiene que pagar o pagó.",
-        "Recibos_Gastos": "Recibos, tickets y comprobantes de gastos, viáticos y compras.",
-        "Banco_Tarjetas": "Resúmenes y movimientos de banco o tarjeta, transferencias, wires.",
-        "Impuestos": "Declaraciones, formularios y comprobantes impositivos.",
+    "finance": {
+        "invoices_issued": "Invoices the user{owner} issues to their clients.",
+        "invoices_received": "Invoices from vendors and services that the user has to pay or has paid.",
+        "receipts_expenses": "Receipts, tickets and proof of expenses, travel costs and purchases.",
+        "bank_cards": "Bank or card statements and transactions, transfers, wires.",
+        "taxes": "Tax returns, forms and proof of tax payments.",
     },
-    "Marketing_Reportes": {
-        "SEO": "Auditorías, keywords, estrategia de SEO y visibilidad en buscadores o IA.",
-        "Ads": "Google Ads, Meta Ads y otras campañas pagas: reportes, previews, presupuestos.",
-        "CRM_Leads": "Exports de HubSpot u otro CRM, listas de leads, contactos y cuentas.",
-        "Redes_Sociales": "Reportes y contenido de redes sociales.",
-        "Analytics": "Reportes de tráfico, performance por canal y métricas web.",
+    "marketing": {
+        "seo": "Audits, keywords, SEO strategy and visibility in search engines or AI.",
+        "ads": "Google Ads, Meta Ads and other paid campaigns: reports, previews, budgets.",
+        "crm_leads": "HubSpot or other CRM exports, lead lists, contacts and accounts.",
+        "social_media": "Social media reports and content.",
+        "analytics": "Traffic reports, channel performance and web metrics.",
     },
-    "RRHH_Timesheets": {
-        "CVs": "Currículums y perfiles de candidatos.",
-        "Contratos": "Contratos y acuerdos con empleados o contractors.",
-        "Timesheets": "Planillas de horas y reportes de tiempo.",
-        "Onboarding": "Material de ingreso y documentación de alta.",
+    "hr": {
+        "resumes": "Resumes and candidate profiles.",
+        "contracts": "Contracts and agreements with employees or contractors.",
+        "timesheets": "Timesheets and time reports.",
+        "onboarding": "Onboarding material and new-hire paperwork.",
     },
-    "Documentos": {
-        "Propuestas_Contratos": "Propuestas comerciales, cotizaciones, contratos y acuerdos.",
-        "Presentaciones": "Decks y presentaciones.",
-        "Planillas": "Hojas de cálculo y datos tabulares de trabajo.",
-        "Notas_Borradores": "Notas, borradores, minutas y textos sueltos.",
+    "documents": {
+        "proposals_contracts": "Business proposals, quotes, contracts and agreements.",
+        "presentations": "Decks and presentations.",
+        "spreadsheets": "Spreadsheets and tabular work data.",
+        "notes_drafts": "Notes, drafts, meeting minutes and loose text.",
     },
-    "Imagenes": {
-        "Fotos": "Fotografías reales de personas, lugares u objetos.",
-        "Disenos_Mockups": "Diseños, mockups, wireframes, diagramas y flujos.",
-        "Logos_Marca": "Logos, íconos y material de marca.",
-        "Generadas_IA": "Imágenes generadas con IA.",
-        "Stock": "Imágenes de bancos de stock descargadas de la web.",
+    "images": {
+        "photos": "Real photographs of people, places or objects.",
+        "designs_mockups": "Designs, mockups, wireframes, diagrams and flows.",
+        "logos_brand": "Logos, icons and brand material.",
+        "ai_generated": "AI-generated images.",
+        "stock": "Stock images downloaded from the web.",
     },
-    "Codigo": {
-        "Proyectos": "Proyectos o repositorios completos, normalmente comprimidos.",
-        "Scripts": "Scripts y archivos de código sueltos.",
-        "Datos_Config": "Archivos de configuración, dumps, esquemas y datos para desarrollo.",
+    "code": {
+        "projects": "Whole projects or repositories, usually zipped.",
+        "scripts": "Scripts and loose code files.",
+        "data_config": "Configuration files, dumps, schemas and development data.",
     },
-    "Personal": {
-        "Identidad": "DNI, pasaporte, licencias y otros documentos de identidad.",
-        "Viajes": "Pasajes, reservas, itinerarios y seguros de viaje.",
-        "Salud": "Estudios, recetas y documentación médica.",
-        "Tramites": "Trámites, formularios oficiales, estatutos y gestiones.",
+    "personal": {
+        "identity": "ID cards, passports, licenses and other identity documents.",
+        "travel": "Tickets, bookings, itineraries and travel insurance.",
+        "health": "Medical tests, prescriptions and health records.",
+        "paperwork": "Paperwork, official forms, bylaws and errands.",
     },
 }
-SIN_SUBCARPETA = "ninguna"
 
-IMPORTANCIA = {
-    "instructions": "¿Qué tan grave sería para el usuario perder el archivo descrito en `archivos.%s`?",
+IMPORTANCE = {
+    "instructions": "How bad would it be for the user to lose the file described in `files.%s`?",
     "criteria": [
-        "Archivo descartable: instalador, descarga genérica, prueba, imagen de stock, export temporal o captura sin información útil.",
-        "Material de referencia o de trabajo ya usado, que se podría volver a conseguir o rehacer sin mucho esfuerzo.",
-        "Trabajo propio o de un cliente que costaría tiempo rehacer: diseños, reportes, documentos, código, presentaciones.",
-        "Documento que no se puede perder: identidad, contratos, facturas e impuestos, comprobantes de pago, credenciales, registros legales o médicos.",
+        "Disposable file: installer, generic download, test, stock image, temporary export or a screenshot with no useful information.",
+        "Reference or already-used working material that could be obtained again or redone without much effort.",
+        "Own or client work that would take time to redo: designs, reports, documents, code, presentations.",
+        "Document that cannot be lost: identity, contracts, invoices and taxes, proof of payment, credentials, legal or medical records.",
     ],
 }
 NOULS = {
-    "reemplazable": {
-        "instructions": "¿El archivo descrito en `archivos.%s` se puede volver a obtener fácilmente si se borra?",
+    "replaceable": {
+        "instructions": "Can the file described in `files.%s` easily be obtained again if it is deleted?",
         "criteria": {
-            "true": "Instalador, descarga pública de la web, foto de stock, export que se regenera desde una herramienta, o comprimido de algo que existe en otro lado.",
-            "false": "Documento propio, original o único; no hay indicio de que exista otra copia.",
+            "true": "Installer, public download from the web, stock photo, export that can be regenerated from a tool, or an archive of something that exists elsewhere.",
+            "false": "Own, original or unique document; nothing suggests another copy exists.",
         },
     },
-    "temporal": {
-        "instructions": "¿El archivo descrito en `archivos.%s` parece temporal, de prueba, un borrador descartado o una copia?",
+    "temporary": {
+        "instructions": "Does the file described in `files.%s` look temporary, a test, a discarded draft or a copy?",
         "criteria": {
-            "true": "Nombres como test, prueba, tmp, untitled, copia, '(1)', old; o una captura de un momento puntual sin valor posterior (un error pasajero, un menú, una pantalla de carga).",
-            "false": "Parece un archivo definitivo que alguien quiso guardar.",
+            "true": "Names like test, prueba, tmp, untitled, copy, copia, '(1)', old; or a screenshot of a passing moment with no later value (a transient error, a menu, a loading screen).",
+            "false": "Looks like a final file that someone meant to keep.",
         },
     },
-    "sensible": {
-        "instructions": "¿El archivo descrito en `archivos.%s` contiene o muy probablemente contiene datos sensibles?",
+    "sensitive": {
+        "instructions": "Does the file described in `files.%s` contain, or very likely contain, sensitive data?",
         "criteria": {
-            "true": "Contraseñas, API keys o tokens, números de documento, datos bancarios o de tarjeta, saldos de cuentas, datos médicos o información personal de terceros.",
-            "false": "No hay indicio de datos privados o confidenciales.",
+            "true": "Passwords, API keys or tokens, ID numbers, bank or card details, account balances, medical data or personal information about third parties.",
+            "false": "No sign of private or confidential data.",
         },
     },
 }
 
 
-# ─── Capturas: regla determinística ───────────────────────────────────────────
+# ─── Settings: .env, language, arguments ──────────────────────────────────────
+
+def load_env():
+    """Environment variables + the .env file next to the script (never committed)."""
+    env = {}
+    env_file = SCRIPT_DIR / ".env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            if "=" in line and not line.strip().startswith("#"):
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip().strip("'\"")
+    # Spanish names from the first version keep working
+    for old, new in (("PROPIETARIO", "OWNER"), ("IGNORAR", "IGNORE")):
+        if old in env:
+            env.setdefault(new, env[old])
+    for k in ("TYPESAFE_API_KEY", "OWNER", "IGNORE", "LANGUAGE", "SCREENSHOTS_DIR",
+              "REVIEW_DIR", "TO_DELETE_DIR"):
+        if os.environ.get(k):
+            env[k] = os.environ[k]
+    return env
+
+
+def system_language():
+    try:
+        out = subprocess.run(["defaults", "read", "-g", "AppleLanguages"],
+                             capture_output=True, text=True, timeout=5).stdout
+        for token in out.replace('"', " ").replace(",", " ").split():
+            if len(token) >= 2 and token[:2].isalpha():
+                return token[:2].lower()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return (os.environ.get("LANG") or "en")[:2].lower()
+
+
+def parse_args():
+    ap = argparse.ArgumentParser(description="macOS Desktop file classifier built on TypeSafe.")
+    ap.add_argument("--dry", action="store_true", help="show what would happen without moving anything")
+    ap.add_argument("--with-content", "--con-contenido", action="store_true",
+                    help="read each file (OCR for images, text of PDFs and documents) and send the "
+                         "first characters to the API; without it only metadata is sent and "
+                         "screenshots are not analyzed")
+    ap.add_argument("--folder", "--carpeta", metavar="DIR",
+                    help="analyze the loose files of this Desktop folder instead of the Desktop itself")
+    ap.add_argument("--limit", "--limite", type=int, metavar="N", help="process only the first N files")
+    ap.add_argument("--screenshots-only", "--solo-capturas", action="store_true",
+                    help="only move screenshots; never calls the API")
+    ap.add_argument("--screenshots-dir", "--capturas", metavar="DIR",
+                    help="where screenshots go: a folder name inside the Desktop or any path "
+                         "(e.g. ~/Pictures/Screenshots). Overrides SCREENSHOTS_DIR and the locale name")
+    ap.add_argument("--lang", metavar="CODE", help="language of folder names and messages: "
+                    + ", ".join(sorted(p.stem for p in LOCALES.glob("*.json"))) + " (default: system language)")
+    ap.add_argument("--undo", "--deshacer", action="store_true", help="revert the last run")
+    return ap.parse_args()
+
+
+ENV = load_env()
+ARGS = parse_args()
+
+LANG = (ARGS.lang or ENV.get("LANGUAGE") or system_language()).lower()
+if not (LOCALES / (LANG + ".json")).exists():
+    if ARGS.lang:
+        sys.exit("No locale '%s' in %s" % (LANG, LOCALES))
+    LANG = "en"
+L = json.loads((LOCALES / (LANG + ".json")).read_text(encoding="utf-8"))
+FOLDER_NAMES = dict(L["folders"])
+for fid, key in ((SCREENSHOTS, "SCREENSHOTS_DIR"), (REVIEW, "REVIEW_DIR"), (TO_DELETE, "TO_DELETE_DIR")):
+    if ENV.get(key):
+        FOLDER_NAMES[fid] = ENV[key]
+if ARGS.screenshots_dir:
+    FOLDER_NAMES[SCREENSHOTS] = ARGS.screenshots_dir
+
+IGNORE = {n.strip() for n in ENV.get("IGNORE", "").split(",") if n.strip()}
+SKIP_NAMES = {"desktop.ini"} | IGNORE
+
+
+def msg(key, *args):
+    text = L["messages"][key]
+    return text % args if args else text
+
+
+def folder_path(fid):
+    """Destination directory for a folder id or a 'dir:<name>' option. Absolute or ~ paths are honored."""
+    name = fid[len(DIR_PREFIX):] if fid.startswith(DIR_PREFIX) else FOLDER_NAMES[fid]
+    return DESKTOP / Path(name).expanduser()
+
+
+def subfolder_name(fid, sub):
+    if sub.startswith(DIR_PREFIX):
+        return sub[len(DIR_PREFIX):]
+    return L["subfolders"][fid][sub]
+
+
+def display(path):
+    try:
+        return str(path.relative_to(DESKTOP))
+    except ValueError:
+        return str(path)
+
+
+# ─── Screenshots: deterministic rule ──────────────────────────────────────────
 
 def is_screenshot(path):
-    if path.name.lower().startswith(SCREENSHOT_PREFIXES):
+    # the filesystem may hand back accents decomposed (NFD)
+    if unicodedata.normalize("NFC", path.name).lower().startswith(SCREENSHOT_PREFIXES):
         return True
-    # macOS marca las capturas con un xattr que sobrevive a los renombres
+    # macOS tags screenshots with an xattr that survives renames
     try:
         out = subprocess.run(["xattr", str(path)], capture_output=True,
                              text=True, timeout=5).stdout
@@ -255,7 +320,7 @@ def is_screenshot(path):
     return SCREENSHOT_XATTR in out.splitlines()
 
 
-# ─── Duplicados exactos: también lo decide el código ──────────────────────────
+# ─── Exact duplicates: also decided by code ───────────────────────────────────
 
 def sha256(path):
     h = hashlib.sha256()
@@ -265,23 +330,24 @@ def sha256(path):
     return h.hexdigest()
 
 
-def find_duplicates(files):
-    """{archivo: original} para los archivos idénticos byte a byte a otro del Escritorio."""
+def find_duplicates(files, roots):
+    """{file: original} for files that are byte-identical to another one under roots."""
     by_size = {}
-    for root, dirs, names in os.walk(str(DESKTOP)):
-        dirs[:] = [d for d in dirs if not d.startswith(".")
-                   and Path(root, d) not in (SCRIPT_DIR, DESKTOP / PARA_BORRAR)]
-        for n in names:
-            if n.startswith("."):
-                continue
-            p = Path(root, n)
-            try:
-                by_size.setdefault(p.stat().st_size, []).append(p)
-            except OSError:
-                pass
+    skip = (SCRIPT_DIR, folder_path(TO_DELETE))
+    for top in roots:
+        for root, dirs, names in os.walk(str(top)):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and Path(root, d) not in skip]
+            for n in names:
+                if n.startswith("."):
+                    continue
+                p = Path(root, n)
+                try:
+                    by_size.setdefault(p.stat().st_size, set()).add(p)
+                except OSError:
+                    pass
     dupes, hashes, pending = {}, {}, set(files)
     for p in files:
-        same_size = [q for q in by_size.get(p.stat().st_size, []) if q != p]
+        same_size = [q for q in by_size.get(p.stat().st_size, ()) if q != p]
         if not same_size or p.stat().st_size == 0:
             continue
         for q in [p] + same_size:
@@ -291,14 +357,14 @@ def find_duplicates(files):
                 except OSError:
                     hashes[q] = None
         twins = [q for q in same_size if hashes[q] and hashes[q] == hashes[p]]
-        # entre dos pendientes idénticos se conserva el primero por orden alfabético
+        # of two identical pending files, the alphabetically first one is kept
         originals = [q for q in twins if q not in pending or str(q) < str(p)]
         if originals:
             dupes[p] = min(originals, key=str)
     return dupes
 
 
-# ─── Estado que ve el modelo ──────────────────────────────────────────────────
+# ─── State the model sees ─────────────────────────────────────────────────────
 
 def human_size(n):
     for unit in ("B", "KB", "MB", "GB"):
@@ -318,17 +384,17 @@ def mdls(path, attr):
 
 
 def ocr_tool():
-    """Compila extraer_texto.swift la primera vez. None si no hay Swift."""
+    """Compiles extraer_texto.swift on first use. None when Swift is not available."""
     if OCR_BIN.exists() and OCR_BIN.stat().st_mtime >= OCR_SRC.stat().st_mtime:
         return OCR_BIN
     if not shutil.which("swiftc"):
         return None
-    print("Compilando extraer_texto (solo la primera vez)…")
+    print(msg("compiling"))
     OCR_BIN.parent.mkdir(exist_ok=True)
     done = subprocess.run(["swiftc", "-O", str(OCR_SRC), "-o", str(OCR_BIN)],
                           capture_output=True, text=True)
     if done.returncode != 0:
-        print("  no se pudo compilar, sigo sin OCR: %s" % done.stderr.strip()[:200])
+        print(msg("compile_failed", done.stderr.strip()[:200]))
         return None
     return OCR_BIN
 
@@ -350,7 +416,7 @@ def ocr_chunk(tool, chunk):
 
 
 def extract_texts(files):
-    """{archivo: inicio del contenido} para los tipos de archivo que se pueden leer."""
+    """{file: start of its content} for the file types that can be read."""
     texts = {}
     for p in files:
         suffix = p.suffix.lower()
@@ -377,57 +443,59 @@ def extract_texts(files):
 def describe(path, screenshot, text):
     stat = path.stat()
     info = {
-        "nombre": path.name,
+        "name": path.name,
         "extension": path.suffix.lower(),
-        "tipo": mdls(path, "kMDItemKind"),
-        "es_captura_de_pantalla": screenshot,
-        "tamaño": human_size(stat.st_size),
-        "modificado": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d"),
-        "descargado_de": mdls(path, "kMDItemWhereFroms"),
-        "titulo": mdls(path, "kMDItemTitle"),
-        "texto_del_archivo": text,
+        "kind": mdls(path, "kMDItemKind"),
+        "is_screenshot": screenshot,
+        "size": human_size(stat.st_size),
+        "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d"),
+        "downloaded_from": mdls(path, "kMDItemWhereFroms"),
+        "title": mdls(path, "kMDItemTitle"),
+        "file_text": text,
     }
     return {k: v for k, v in info.items() if v not in (None, "")}
 
 
+def sample_names(directory, n):
+    return [p.name for p in sorted(directory.iterdir()) if not p.name.startswith(".")][:n]
+
+
 def build_categories():
-    criteria = dict(CATEGORIES)
+    """Predefined categories plus the user's own Desktop folders, described by their contents."""
+    criteria = {k: v for k, v in CATEGORIES.items() if k != OTHER}
+    taken = {folder_path(fid) for fid in FOLDER_NAMES} | {SCRIPT_DIR}
     for d in sorted(DESKTOP.iterdir()):
-        if (not d.is_dir() or d.name.startswith(".") or d.name in criteria
-                or d.name in (CAPTURAS, NEEDS_REVIEW, PARA_BORRAR, SCRIPT_DIR.name) or d.name in IGNORAR):
+        if not d.is_dir() or d.name.startswith(".") or d in taken or d.name in IGNORE:
             continue
-        sample = [p.name for p in sorted(d.iterdir()) if not p.name.startswith(".")][:6]
-        criteria[d.name] = {
-            "what": "Carpeta existente del usuario llamada '%s'. Elegila solo si el archivo "
-                    "pertenece claramente a ese cliente, proyecto o tema." % d.name,
-            "contiene": sample,
+        criteria[DIR_PREFIX + d.name] = {
+            "what": "The user's existing folder named '%s'. Choose it only when the file clearly "
+                    "belongs to that client, project or topic." % d.name,
+            "contains": sample_names(d, 6),
         }
-    criteria["otro"] = criteria.pop("otro")  # "otro" al final
+    criteria[OTHER] = CATEGORIES[OTHER]
     return criteria
 
 
 def build_subfolders(categories):
-    """{carpeta: opciones de subcarpeta}; solo carpetas con al menos una subcarpeta."""
+    """{folder option: subfolder options}; predefined ones plus subfolders that already exist."""
+    owner = " (%s)" % ENV["OWNER"] if ENV.get("OWNER") else ""
     subs = {}
-    for folder in [CAPTURAS] + [c for c in categories if c != "otro"]:
-        options = dict(SUBFOLDERS.get(folder, {}))
-        folder_dir = DESKTOP / folder
-        if folder_dir.is_dir():
-            for d in sorted(folder_dir.iterdir()):
-                if d.is_dir() and not d.name.startswith(".") and d.name not in options:
-                    sample = [p.name for p in sorted(d.iterdir()) if not p.name.startswith(".")][:5]
-                    options[d.name] = {"what": "Subcarpeta existente '%s'." % d.name, "contiene": sample}
+    for fid in [SCREENSHOTS] + [c for c in categories if c != OTHER]:
+        options = {k: v.format(owner=owner) for k, v in SUBFOLDERS.get(fid, {}).items()}
+        known = {subfolder_name(fid, s) for s in options}
+        directory = folder_path(fid)
+        if directory.is_dir():
+            for d in sorted(directory.iterdir()):
+                if d.is_dir() and not d.name.startswith(".") and d.name not in known:
+                    options[DIR_PREFIX + d.name] = {
+                        "what": "Existing subfolder '%s'." % d.name, "contains": sample_names(d, 5)}
         if options:
-            options[SIN_SUBCARPETA] = "Ninguna subcarpeta encaja claramente; el archivo queda en la raíz de la carpeta."
-            subs[folder] = options
+            options[NO_SUBFOLDER] = "No subfolder clearly fits; the file stays at the top of the folder."
+            subs[fid] = options
     return subs
 
 
 # ─── TypeSafe ─────────────────────────────────────────────────────────────────
-
-def load_api_key():
-    return ENV.get("TYPESAFE_API_KEY") or None
-
 
 def system_one(api_key, state, questions):
     body = json.dumps({"model": MODEL, "state": state, "questions": questions}).encode()
@@ -448,102 +516,103 @@ def system_one(api_key, state, questions):
             if attempt < 4:
                 time.sleep(2 ** attempt)
                 continue
-            raise RuntimeError("No se pudo conectar con TypeSafe: %s" % e.reason)
+            raise RuntimeError(msg("no_connection", e.reason))
 
 
 def judge_batch(api_key, categories, subfolders, batch):
-    """Todas las preguntas de todos los archivos del lote en un solo request.
+    """Every question about every file of the batch in a single request.
 
-    Las preguntas de subcarpeta son especulativas: se pregunta una por cada
-    carpeta posible y el código usa solo la de la carpeta que resulte elegida.
+    Subfolder questions are speculative: one per possible folder, and the code
+    only reads the one for the folder that ends up chosen.
     """
-    state = {"archivos": {}}
+    state = {"files": {}}
     questions = {}
     for i, item in enumerate(batch):
         fid = "f%d" % i
-        state["archivos"][fid] = describe(item["path"], item["screenshot"], item["text"])
+        state["files"][fid] = describe(item["path"], item["screenshot"], item["text"])
         if item["screenshot"]:
-            sub_folders = [CAPTURAS]
+            sub_folders = [SCREENSHOTS]
         else:
             sub_folders = list(subfolders)
-            questions[fid + ".categoria"] = {
+            questions[fid + "|folder"] = {
                 "type": "choice",
-                "instructions": "¿En qué carpeta del Escritorio debería guardarse el archivo "
-                                "descrito en `archivos.%s`? Decidí por su nombre, tipo, origen "
-                                "y texto si está disponible." % fid,
+                "instructions": "In which Desktop folder should the file described in `files.%s` be "
+                                "stored? Decide from its name, kind, origin and text when available." % fid,
                 "criteria": categories,
             }
         for folder in sub_folders:
             if folder in subfolders:
-                questions["%s.sub.%s" % (fid, folder)] = {
+                label = folder[len(DIR_PREFIX):] if folder.startswith(DIR_PREFIX) else folder
+                questions["%s|sub|%s" % (fid, folder)] = {
                     "type": "choice",
-                    "instructions": "Suponiendo que el archivo descrito en `archivos.%s` se guarda en "
-                                    "la carpeta '%s', ¿en cuál de sus subcarpetas va?" % (fid, folder),
+                    "instructions": "Assuming the file described in `files.%s` is stored in the '%s' "
+                                    "folder, which of its subfolders does it go in?" % (fid, label),
                     "criteria": subfolders[folder],
                 }
-        questions[fid + ".importancia"] = {
+        questions[fid + "|importance"] = {
             "type": "score",
-            "instructions": IMPORTANCIA["instructions"] % fid,
-            "criteria": IMPORTANCIA["criteria"],
+            "instructions": IMPORTANCE["instructions"] % fid,
+            "criteria": IMPORTANCE["criteria"],
         }
         for name, q in NOULS.items():
-            questions["%s.%s" % (fid, name)] = {
+            questions["%s|%s" % (fid, name)] = {
                 "type": "noul", "instructions": q["instructions"] % fid, "criteria": q["criteria"],
             }
 
     answers = system_one(api_key, state, questions)
     for i, item in enumerate(batch):
-        fid = "f%d" % i
-        item["answers"] = {k[len(fid) + 1:]: v for k, v in answers.items() if k.startswith(fid + ".")}
+        prefix = "f%d|" % i
+        item["answers"] = {k[len(prefix):]: v for k, v in answers.items() if k.startswith(prefix)}
     return batch
 
 
-# ─── Política: de juicios a decisión ──────────────────────────────────────────
+# ─── Policy: from judgments to a decision ─────────────────────────────────────
 
 def decide(item):
-    """Completa item con carpeta, subcarpeta, veredicto y motivo."""
+    """Fills item with folder, subfolder, verdict and reason."""
     a = item["answers"]
-    item["importancia"] = a["importancia"]["score"]
+    item["importance"] = a["importance"]["score"]
     for name in NOULS:
         item[name] = a[name]["noul"]
 
+    item["folder_note"] = ""
     if item["screenshot"]:
-        item["carpeta"], item["confianza"] = CAPTURAS, 1.0
+        item["folder"], item["confidence"] = SCREENSHOTS, 1.0
     else:
-        cat = a["categoria"]
-        item["carpeta"], item["confianza"] = cat["choice"], cat["confidence"]
-        if cat["choice"] == "otro" or cat["confidence"] < MIN_CONFIDENCE:
-            top = sorted(cat["probabilities"].items(), key=lambda kv: -kv[1])[:2]
-            item["motivo_carpeta"] = "dudoso: " + ", ".join("%s %.0f%%" % (k, v * 100) for k, v in top)
-            item["carpeta"] = NEEDS_REVIEW
+        choice = a["folder"]
+        item["folder"], item["confidence"] = choice["choice"], choice["confidence"]
+        if choice["choice"] == OTHER or choice["confidence"] < MIN_CONFIDENCE:
+            top = sorted(choice["probabilities"].items(), key=lambda kv: -kv[1])[:2]
+            item["folder_note"] = msg("unsure") + ": " + ", ".join(
+                "%s %.0f%%" % (k[len(DIR_PREFIX):] if k.startswith(DIR_PREFIX) else k, v * 100)
+                for k, v in top)
+            item["folder"] = REVIEW
 
-    sub = a.get("sub." + item["carpeta"])
-    item["subcarpeta"] = ""
-    if sub and sub["choice"] != SIN_SUBCARPETA and sub["probabilities"][sub["choice"]] >= MIN_SUB_PROB:
-        item["subcarpeta"] = sub["choice"]
+    sub = a.get("sub|" + item["folder"])
+    item["subfolder"] = ""
+    if sub and sub["choice"] != NO_SUBFOLDER and sub["probabilities"][sub["choice"]] >= MIN_SUB_PROB:
+        item["subfolder"] = subfolder_name(item["folder"], sub["choice"])
 
-    senal = max(item["reemplazable"], item["temporal"])
-    if item.get("duplicado_de"):
-        item["veredicto"] = "borrar"
-        item["motivo"] = "duplicado exacto de %s" % item["duplicado_de"].relative_to(DESKTOP)
-    elif item["importancia"] >= IMPORTANTE_DESDE or item["sensible"] >= SENSIBLE_DESDE:
-        item["veredicto"] = "conservar"
+    signal = max(item["replaceable"], item["temporary"])
+    if item.get("duplicate_of"):
+        item["verdict"], item["reason"] = "delete", msg("reason_duplicate", display(item["duplicate_of"]))
+    elif item["importance"] >= IMPORTANT_FROM or item["sensitive"] >= SENSITIVE_FROM:
         reasons = []
-        if item["importancia"] >= IMPORTANTE_DESDE:
-            reasons.append("importante")
-        if item["sensible"] >= SENSIBLE_DESDE:
-            reasons.append("datos sensibles")
-        item["motivo"] = " + ".join(reasons)
-    elif item["importancia"] <= BORRABLE_IMPORTANCIA_MAX and senal >= BORRABLE_SENAL_MIN:
-        item["veredicto"] = "borrar"
-        item["motivo"] = "reemplazable" if item["reemplazable"] >= item["temporal"] else "temporal o de prueba"
+        if item["importance"] >= IMPORTANT_FROM:
+            reasons.append(msg("reason_important"))
+        if item["sensitive"] >= SENSITIVE_FROM:
+            reasons.append(msg("reason_sensitive"))
+        item["verdict"], item["reason"] = "keep", " + ".join(reasons)
+    elif item["importance"] <= DELETABLE_MAX_IMPORTANCE and signal >= DELETABLE_MIN_SIGNAL:
+        item["verdict"] = "delete"
+        item["reason"] = msg("reason_replaceable" if item["replaceable"] >= item["temporary"]
+                             else "reason_temporary")
     else:
-        item["veredicto"] = "guardar"
-        item["motivo"] = "sin motivo para borrar ni para destacar"
+        item["verdict"], item["reason"] = "file", msg("reason_none")
     return item
 
 
-# ─── Mover / deshacer ─────────────────────────────────────────────────────────
+# ─── Move / undo ──────────────────────────────────────────────────────────────
 
 def safe_dest(dest_dir, filename):
     dest = dest_dir / filename
@@ -555,11 +624,10 @@ def safe_dest(dest_dir, filename):
     return dest
 
 
-def move(path, folder, run_id, note=""):
-    dest_dir = DESKTOP / folder
-    print("  %s%-36s ← %s%s" % ("[dry] " if DRY_RUN else "", folder + "/", path.name,
+def move(path, dest_dir, run_id, note=""):
+    print("  %s%-36s ← %s%s" % ("[dry] " if ARGS.dry else "", display(dest_dir) + "/", path.name,
                                  "  (%s)" % note if note else ""))
-    if DRY_RUN or path.parent == dest_dir:
+    if ARGS.dry or path.parent == dest_dir:
         return
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = safe_dest(dest_dir, path.name)
@@ -574,7 +642,7 @@ def undo():
     if LOG.exists():
         entries = [json.loads(l) for l in LOG.read_text(encoding="utf-8").splitlines() if l.strip()]
     if not entries:
-        print("No hay movimientos registrados.")
+        print(msg("nothing_to_undo"))
         return
     last = entries[-1]["run"]
     restored = 0
@@ -584,36 +652,37 @@ def undo():
             shutil.move(str(src), str(dst))
             restored += 1
         else:
-            print("  no se pudo restaurar: %s" % src.name)
+            print("  " + msg("undo_failed", src.name))
     remaining = [e for e in entries if e["run"] != last]
     LOG.write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in remaining),
                    encoding="utf-8")
-    print("Corrida %s revertida: %d archivos devueltos a su lugar." % (last, restored))
+    print(msg("undone", last, restored))
 
 
 def write_report(items, run_id):
-    INFORMES.mkdir(exist_ok=True)
-    report = INFORMES / ("informe-%s%s.csv" % (run_id, "-dry" if DRY_RUN else ""))
+    REPORTS.mkdir(exist_ok=True)
+    report = REPORTS / ("informe-%s%s.csv" % (run_id, "-dry" if ARGS.dry else ""))
     with open(report, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["archivo", "veredicto", "motivo", "carpeta", "subcarpeta", "confianza_carpeta",
-                    "importancia_0a3", "sensible", "reemplazable", "temporal"])
+        w.writerow(["file", "verdict", "reason", "destination", "folder_confidence",
+                    "importance_0to3", "sensitive", "replaceable", "temporary"])
         for it in items:
-            w.writerow([it["path"].name, it["veredicto"], it["motivo"], it["carpeta"], it["subcarpeta"],
-                        "%.2f" % it["confianza"], "%.1f" % it["importancia"], "%.2f" % it["sensible"],
-                        "%.2f" % it["reemplazable"], "%.2f" % it["temporal"]])
+            w.writerow([it["path"].name, it["verdict"], it["reason"], display(it["dest"]),
+                        "%.2f" % it["confidence"], "%.1f" % it["importance"], "%.2f" % it["sensitive"],
+                        "%.2f" % it["replaceable"], "%.2f" % it["temporary"]])
     return report
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def source_dir():
-    if "--carpeta" in ARGS:
-        src = (DESKTOP / ARGS[ARGS.index("--carpeta") + 1]).resolve()
-        if not src.is_dir() or DESKTOP not in src.parents:
-            sys.exit("Error: --carpeta tiene que ser una carpeta dentro del Escritorio.")
-        return src
-    return DESKTOP
+    if not ARGS.folder:
+        return DESKTOP
+    src = (DESKTOP / Path(ARGS.folder).expanduser()).resolve()
+    inside = DESKTOP in src.parents or src == folder_path(SCREENSHOTS).resolve()
+    if not src.is_dir() or not inside:
+        sys.exit(msg("bad_folder"))
+    return src
 
 
 def pending_files(src):
@@ -627,49 +696,49 @@ def pending_files(src):
 
 
 def main():
-    if "--deshacer" in ARGS:
+    if ARGS.undo:
         return undo()
 
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
     src = source_dir()
+    shots_dir = folder_path(SCREENSHOTS)
     now = time.time()
     items = []
     for p in pending_files(src):
-        shot = src == DESKTOP / CAPTURAS or is_screenshot(p)
-        # las capturas aparecen ya completas; el resto puede estar descargándose
+        shot = src == shots_dir.resolve() or is_screenshot(p)
+        # screenshots show up complete; anything else may still be downloading
         if shot or now - p.stat().st_mtime >= MIN_AGE_SECONDS:
             items.append({"path": p, "screenshot": shot, "text": None})
+    if ARGS.limit:
+        items = items[:ARGS.limit]
 
-    if "--limite" in ARGS:
-        items = items[:int(ARGS[ARGS.index("--limite") + 1])]
+    api_key = None if ARGS.screenshots_only else ENV.get("TYPESAFE_API_KEY")
+    if not ARGS.screenshots_only and not api_key:
+        print(msg("no_key", SCRIPT_DIR / ".env") + "\n")
 
-    api_key = None if SOLO_CAPTURAS else load_api_key()
-    if not SOLO_CAPTURAS and not api_key:
-        print("Falta TYPESAFE_API_KEY (creala en https://console.typesafe.ai/ y guardala en\n"
-              "%s como TYPESAFE_API_KEY=...). Solo muevo las capturas.\n" % (SCRIPT_DIR / ".env"))
-
-    # Sin API, o capturas sin contenido (el nombre no dice nada): regla fija y listo
+    # No API, or screenshots without content (their name says nothing): fixed rule and done
     direct, judged = [], []
     for it in items:
-        if it["screenshot"] and (not api_key or not CON_CONTENIDO):
+        if it["screenshot"] and (not api_key or not ARGS.with_content):
             direct.append(it)
         elif api_key:
             judged.append(it)
     if direct:
-        print("Capturas: %d" % len(direct))
+        print(msg("screenshots", len(direct)))
         for it in direct:
-            move(it["path"], CAPTURAS, run_id, "captura")
+            move(it["path"], shots_dir, run_id, msg("screenshot_note"))
     if not judged:
         return
 
-    print("Analizando %d archivos…" % len(judged))
-    if CON_CONTENIDO:
+    print(msg("analyzing", len(judged)))
+    if ARGS.with_content:
         texts = extract_texts([it["path"] for it in judged])
         for it in judged:
             it["text"] = texts.get(it["path"])
-    dupes = find_duplicates([it["path"] for it in judged])
+    roots = {DESKTOP, shots_dir} if shots_dir.is_dir() else {DESKTOP}
+    dupes = find_duplicates([it["path"] for it in judged], roots)
     for it in judged:
-        it["duplicado_de"] = dupes.get(it["path"])
+        it["duplicate_of"] = dupes.get(it["path"])
 
     categories = build_categories()
     subfolders = build_subfolders(categories)
@@ -677,24 +746,23 @@ def main():
     with ThreadPoolExecutor(max_workers=8) as pool:
         list(pool.map(lambda b: judge_batch(api_key, categories, subfolders, b), batches))
 
+    counts = {"keep": 0, "file": 0, "delete": 0}
     for it in judged:
         decide(it)
-        note = "%s: %s · importancia %.1f/3" % (it["veredicto"], it["motivo"], it["importancia"])
-        if it.get("motivo_carpeta"):
-            note += " · " + it["motivo_carpeta"]
-        if it["veredicto"] == "borrar":
-            dest = PARA_BORRAR
+        counts[it["verdict"]] += 1
+        note = "%s: %s · %s %.1f/3" % (L["verdicts"][it["verdict"]], it["reason"],
+                                      msg("importance"), it["importance"])
+        if it["folder_note"]:
+            note += " · " + it["folder_note"]
+        if it["verdict"] == "delete":
+            it["dest"] = folder_path(TO_DELETE)
         else:
-            dest = it["carpeta"] + ("/" + it["subcarpeta"] if it["subcarpeta"] else "")
-        move(it["path"], dest, run_id, note)
+            it["dest"] = folder_path(it["folder"]) / it["subfolder"]
+        move(it["path"], it["dest"], run_id, note)
 
-    counts = {}
-    for it in judged:
-        counts[it["veredicto"]] = counts.get(it["veredicto"], 0) + 1
-    print("\nImportantes (conservar): %d · Guardados sin más: %d · Se pueden borrar: %d "
-          "(apartados en %s/, nada se borra solo)"
-          % (counts.get("conservar", 0), counts.get("guardar", 0), counts.get("borrar", 0), PARA_BORRAR))
-    print("Informe: %s" % write_report(judged, run_id))
+    print("\n" + msg("summary", counts["keep"], counts["file"], counts["delete"],
+                     display(folder_path(TO_DELETE))))
+    print(msg("report", write_report(judged, run_id)))
 
 
 if __name__ == "__main__":

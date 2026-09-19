@@ -1,0 +1,99 @@
+{
+  "folders": {
+    "screenshots": "Capturas",
+    "review": "Por_Revisar",
+    "to_delete": "Para_Borrar",
+    "finance": "Finanzas_Facturacion",
+    "marketing": "Marketing_Reportes",
+    "hr": "RRHH_Timesheets",
+    "documents": "Documentos",
+    "images": "Imagenes",
+    "videos": "Videos",
+    "code": "Codigo",
+    "installers": "Instaladores",
+    "personal": "Personal"
+  },
+  "subfolders": {
+    "screenshots": {
+      "work": "Trabajo",
+      "code_errors": "Codigo_Errores",
+      "design_ui": "Diseno_UI",
+      "finance_payments": "Finanzas_Pagos",
+      "conversations": "Conversaciones",
+      "maps_places": "Mapas_Lugares",
+      "personal": "Personal"
+    },
+    "finance": {
+      "invoices_issued": "Facturas_Emitidas",
+      "invoices_received": "Facturas_Recibidas",
+      "receipts_expenses": "Recibos_Gastos",
+      "bank_cards": "Banco_Tarjetas",
+      "taxes": "Impuestos"
+    },
+    "marketing": {
+      "seo": "SEO",
+      "ads": "Ads",
+      "crm_leads": "CRM_Leads",
+      "social_media": "Redes_Sociales",
+      "analytics": "Analytics"
+    },
+    "hr": {
+      "resumes": "CVs",
+      "contracts": "Contratos",
+      "timesheets": "Timesheets",
+      "onboarding": "Onboarding"
+    },
+    "documents": {
+      "proposals_contracts": "Propuestas_Contratos",
+      "presentations": "Presentaciones",
+      "spreadsheets": "Planillas",
+      "notes_drafts": "Notas_Borradores"
+    },
+    "images": {
+      "photos": "Fotos",
+      "designs_mockups": "Disenos_Mockups",
+      "logos_brand": "Logos_Marca",
+      "ai_generated": "Generadas_IA",
+      "stock": "Stock"
+    },
+    "code": {
+      "projects": "Proyectos",
+      "scripts": "Scripts",
+      "data_config": "Datos_Config"
+    },
+    "personal": {
+      "identity": "Identidad",
+      "travel": "Viajes",
+      "health": "Salud",
+      "paperwork": "Tramites"
+    }
+  },
+  "verdicts": {
+    "keep": "conservar",
+    "file": "guardar",
+    "delete": "borrar"
+  },
+  "messages": {
+    "screenshots": "Capturas: %d",
+    "screenshot_note": "captura",
+    "analyzing": "Analizando %d archivos…",
+    "no_key": "Falta TYPESAFE_API_KEY (creala en https://console.typesafe.ai/ y guardala en\n%s como TYPESAFE_API_KEY=...). Solo se mueven las capturas.",
+    "compiling": "Compilando extraer_texto (solo la primera vez)…",
+    "compile_failed": "  no se pudo compilar, sigo sin OCR: %s",
+    "no_connection": "No se pudo conectar con TypeSafe: %s",
+    "unsure": "dudoso",
+    "importance": "importancia",
+    "reason_duplicate": "duplicado exacto de %s",
+    "reason_important": "importante",
+    "reason_sensitive": "datos sensibles",
+    "reason_replaceable": "reemplazable",
+    "reason_temporary": "temporal o de prueba",
+    "reason_none": "sin motivo para borrar ni para destacar",
+    "summary": "Importantes (conservar): %d · Guardados sin más: %d · Se pueden borrar: %d (apartados en %s/, nada se borra solo)",
+    "report": "Informe: %s",
+    "nothing_to_undo": "No hay movimientos registrados.",
+    "undo_failed": "no se pudo restaurar: %s",
+    "undone": "Corrida %s revertida: %d archivos devueltos a su lugar.",
+    "bad_folder": "Error: --folder tiene que ser una carpeta dentro del Escritorio."
+  }
+}

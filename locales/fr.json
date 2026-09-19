@@ -1,0 +1,99 @@
+{
+  "folders": {
+    "screenshots": "Captures",
+    "review": "A_Verifier",
+    "to_delete": "A_Supprimer",
+    "finance": "Finances_Facturation",
+    "marketing": "Marketing_Rapports",
+    "hr": "RH_Feuilles_de_temps",
+    "documents": "Documents",
+    "images": "Images",
+    "videos": "Videos",
+    "code": "Code",
+    "installers": "Installateurs",
+    "personal": "Personnel"
+  },
+  "subfolders": {
+    "screenshots": {
+      "work": "Travail",
+      "code_errors": "Code_Erreurs",
+      "design_ui": "Design_UI",
+      "finance_payments": "Finances_Paiements",
+      "conversations": "Conversations",
+      "maps_places": "Cartes_Lieux",
+      "personal": "Personnel"
+    },
+    "finance": {
+      "invoices_issued": "Factures_Emises",
+      "invoices_received": "Factures_Recues",
+      "receipts_expenses": "Recus_Depenses",
+      "bank_cards": "Banque_Cartes",
+      "taxes": "Impots"
+    },
+    "marketing": {
+      "seo": "SEO",
+      "ads": "Publicite",
+      "crm_leads": "CRM_Leads",
+      "social_media": "Reseaux_Sociaux",
+      "analytics": "Analytics"
+    },
+    "hr": {
+      "resumes": "CV",
+      "contracts": "Contrats",
+      "timesheets": "Feuilles_de_temps",
+      "onboarding": "Integration"
+    },
+    "documents": {
+      "proposals_contracts": "Propositions_Contrats",
+      "presentations": "Presentations",
+      "spreadsheets": "Tableurs",
+      "notes_drafts": "Notes_Brouillons"
+    },
+    "images": {
+      "photos": "Photos",
+      "designs_mockups": "Designs_Maquettes",
+      "logos_brand": "Logos_Marque",
+      "ai_generated": "Generees_IA",
+      "stock": "Stock"
+    },
+    "code": {
+      "projects": "Projets",
+      "scripts": "Scripts",
+      "data_config": "Donnees_Config"
+    },
+    "personal": {
+      "identity": "Identite",
+      "travel": "Voyages",
+      "health": "Sante",
+      "paperwork": "Demarches"
+    }
+  },
+  "verdicts": {
+    "keep": "conserver",
+    "file": "classer",
+    "delete": "supprimer"
+  },
+  "messages": {
+    "screenshots": "Captures d’écran : %d",
+    "screenshot_note": "capture",
+    "analyzing": "Analyse de %d fichiers…",
+    "no_key": "TYPESAFE_API_KEY est manquante (créez-en une sur https://console.typesafe.ai/ et enregistrez-la dans\n%s sous la forme TYPESAFE_API_KEY=...). Seules les captures sont déplacées.",
+    "compiling": "Compilation de extraer_texto (la première fois seulement)…",
+    "compile_failed": "  compilation impossible, poursuite sans OCR : %s",
+    "no_connection": "Connexion à TypeSafe impossible : %s",
+    "unsure": "incertain",
+    "importance": "importance",
+    "reason_duplicate": "doublon exact de %s",
+    "reason_important": "important",
+    "reason_sensitive": "données sensibles",
+    "reason_replaceable": "remplaçable",
+    "reason_temporary": "temporaire ou de test",
+    "reason_none": "aucune raison de supprimer ni de signaler",
+    "summary": "Importants (conserver) : %d · Classés : %d · Supprimables : %d (mis de côté dans %s/, rien n’est supprimé automatiquement)",
+    "report": "Rapport : %s",
+    "nothing_to_undo": "Aucun déplacement enregistré.",
+    "undo_failed": "restauration impossible : %s",
+    "undone": "Exécution %s annulée : %d fichiers remis en place.",
+    "bad_folder": "Erreur : --folder doit être un dossier du Bureau."
+  }
+}
