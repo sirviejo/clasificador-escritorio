@@ -94,6 +94,12 @@
     "nothing_to_undo": "No hay movimientos registrados.",
     "undo_failed": "no se pudo restaurar: %s",
     "undone": "Corrida %s revertida: %d archivos devueltos a su lugar.",
-    "bad_folder": "Error: --folder tiene que ser una carpeta dentro del Escritorio."
+    "bad_folder": "Error: --folder tiene que ser una carpeta dentro del Escritorio.",
+    "recap_title": "Resumen",
+    "recap_moved": "Se movieron %d archivos:",
+    "recap_would_move": "Se moverían %d archivos:",
+    "recap_in_place": "Ya estaban en su lugar: %d",
+    "recap_jev": "Jev: %d requests · %d preguntas · %s tokens de entrada · costo ≈ USD %s",
+    "recap_no_jev": "No se usó Jev (USD 0)"
   }
 }

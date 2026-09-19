@@ -59,8 +59,14 @@ Analisi di 3 file…
   Schermate/Mappe_Luoghi/              ← Schermata 2026-04-22 alle 20.30.18.png  (archiviare: nessun motivo per eliminare né per segnalare · importanza 0.8/3)
   Da_Eliminare/                        ← Zoom-installer.dmg  (eliminare: sostituibile · importanza 0.1/3)
 
-Importanti (conservare): 1 · Archiviati: 1 · Eliminabili: 1 (messi da parte in Da_Eliminare/, nulla viene eliminato automaticamente)
-Report: informes/informe-20260919-125152.csv
+Riepilogo
+  3 file spostati:
+       1 → Finanze_Fatturazione/Fatture_Emesse/
+       1 → Schermate/Mappe_Luoghi/
+       1 → Da_Eliminare/
+  Jev: 1 richieste · 36 domande · 21,480 token in ingresso · costo ≈ USD 0.0009
+  Importanti (conservare): 1 · Archiviati: 1 · Eliminabili: 1 (messi da parte in Da_Eliminare/, nulla viene eliminato automaticamente)
+  Report: informes/informe-20260919-125152.csv
 ```
 
 ## Lingue

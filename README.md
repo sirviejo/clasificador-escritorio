@@ -59,8 +59,14 @@ Analyzing 3 files…
   Screenshots/Maps_Places/             ← Screenshot 2026-04-22 at 8.30.18 PM.png  (file: no reason to delete or to flag · importance 0.8/3)
   To_Delete/                           ← Zoom-installer.dmg  (delete: replaceable · importance 0.1/3)
 
-Important (keep): 1 · Filed: 1 · Can be deleted: 1 (set aside in To_Delete/, nothing is deleted automatically)
-Report: informes/informe-20260919-125152.csv
+Summary
+  Moved 3 files:
+       1 → Finance_Invoicing/Invoices_Issued/
+       1 → Screenshots/Maps_Places/
+       1 → To_Delete/
+  Jev: 1 requests · 36 questions · 21,480 input tokens · cost ≈ USD 0.0009
+  Important (keep): 1 · Filed: 1 · Can be deleted: 1 (set aside in To_Delete/, nothing is deleted automatically)
+  Report: informes/informe-20260919-125152.csv
 ```
 
 ## Languages

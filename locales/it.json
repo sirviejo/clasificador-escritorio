@@ -94,6 +94,12 @@
     "nothing_to_undo": "Nessuno spostamento registrato.",
     "undo_failed": "impossibile ripristinare: %s",
     "undone": "Esecuzione %s annullata: %d file rimessi a posto.",
-    "bad_folder": "Errore: --folder deve essere una cartella della Scrivania."
+    "bad_folder": "Errore: --folder deve essere una cartella della Scrivania.",
+    "recap_title": "Riepilogo",
+    "recap_moved": "%d file spostati:",
+    "recap_would_move": "%d file verrebbero spostati:",
+    "recap_in_place": "Già al loro posto: %d",
+    "recap_jev": "Jev: %d richieste · %d domande · %s token in ingresso · costo ≈ USD %s",
+    "recap_no_jev": "Jev non è stato usato (USD 0)"
   }
 }

@@ -94,6 +94,12 @@
     "nothing_to_undo": "No moves on record.",
     "undo_failed": "could not restore: %s",
     "undone": "Run %s reverted: %d files back in place.",
-    "bad_folder": "Error: --folder must be a folder inside the Desktop."
+    "bad_folder": "Error: --folder must be a folder inside the Desktop.",
+    "recap_title": "Summary",
+    "recap_moved": "Moved %d files:",
+    "recap_would_move": "Would move %d files:",
+    "recap_in_place": "Already in place: %d",
+    "recap_jev": "Jev: %d requests · %d questions · %s input tokens · cost ≈ USD %s",
+    "recap_no_jev": "Jev was not used (USD 0)"
   }
 }

@@ -94,6 +94,12 @@
     "nothing_to_undo": "Aucun déplacement enregistré.",
     "undo_failed": "restauration impossible : %s",
     "undone": "Exécution %s annulée : %d fichiers remis en place.",
-    "bad_folder": "Erreur : --folder doit être un dossier du Bureau."
+    "bad_folder": "Erreur : --folder doit être un dossier du Bureau.",
+    "recap_title": "Résumé",
+    "recap_moved": "%d fichiers déplacés :",
+    "recap_would_move": "%d fichiers seraient déplacés :",
+    "recap_in_place": "Déjà à leur place : %d",
+    "recap_jev": "Jev : %d requêtes · %d questions · %s tokens d’entrée · coût ≈ %s USD",
+    "recap_no_jev": "Jev n’a pas été utilisé (0 USD)"
   }
 }

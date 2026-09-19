@@ -60,8 +60,14 @@ Analizando 3 archivos…
   Capturas/Mapas_Lugares/                 ← Captura de pantalla 2026-04-22….png  (guardar: sin motivo para borrar ni para destacar · importancia 0.8/3)
   Para_Borrar/                            ← Zoom-installer.dmg  (borrar: reemplazable · importancia 0.1/3)
 
-Importantes (conservar): 1 · Guardados sin más: 1 · Se pueden borrar: 1 (apartados en Para_Borrar/, nada se borra solo)
-Informe: informes/informe-20260919-125152.csv
+Resumen
+  Se movieron 3 archivos:
+       1 → Finanzas_Facturacion/Facturas_Emitidas/
+       1 → Capturas/Mapas_Lugares/
+       1 → Para_Borrar/
+  Jev: 1 requests · 36 preguntas · 21,480 tokens de entrada · costo ≈ USD 0.0009
+  Importantes (conservar): 1 · Guardados sin más: 1 · Se pueden borrar: 1 (apartados en Para_Borrar/, nada se borra solo)
+  Informe: informes/informe-20260919-125152.csv
 ```
 
 ## Idiomas

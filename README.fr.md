@@ -59,8 +59,14 @@ Analyse de 3 fichiers…
   Captures/Cartes_Lieux/                ← Capture d’écran 2026-04-22 à 20.30.18.png  (classer: aucune raison de supprimer ni de signaler · importance 0.8/3)
   A_Supprimer/                          ← Zoom-installer.dmg  (supprimer: remplaçable · importance 0.1/3)
 
-Importants (conserver) : 1 · Classés : 1 · Supprimables : 1 (mis de côté dans A_Supprimer/, rien n’est supprimé automatiquement)
-Rapport : informes/informe-20260919-125152.csv
+Résumé
+  3 fichiers déplacés :
+       1 → Finances_Facturation/Factures_Emises/
+       1 → Captures/Cartes_Lieux/
+       1 → A_Supprimer/
+  Jev : 1 requêtes · 36 questions · 21,480 tokens d’entrée · coût ≈ 0.0009 USD
+  Importants (conserver) : 1 · Classés : 1 · Supprimables : 1 (mis de côté dans A_Supprimer/, rien n’est supprimé automatiquement)
+  Rapport : informes/informe-20260919-125152.csv
 ```
 
 ## Langues

@@ -46,6 +46,7 @@ OCR_BIN = SCRIPT_DIR / ".bin" / "extraer_texto"
 
 API_URL = "https://api.typesafe.ai/v1/systemone"
 MODEL = "jev-latest"
+USD_PER_MILLION_INPUT_TOKENS = 0.042  # Jev pricing (output tokens are free): docs.typesafe.ai/models
 BATCH_SIZE = 4           # files per request (all their questions run in parallel)
 MIN_AGE_SECONDS = 10     # leave files that are still being written alone
 CONTENT_CHARS = 1200     # how much of the file's text the model sees
@@ -506,7 +507,8 @@ def system_one(api_key, state, questions):
         })
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
-                return json.loads(resp.read())["answers"]
+                data = json.loads(resp.read())
+                return data["answers"], data.get("usage", {})
         except urllib.error.HTTPError as e:
             if e.code in (429, 529, 500, 502, 503) and attempt < 4:
                 time.sleep(2 ** attempt)
@@ -559,11 +561,11 @@ def judge_batch(api_key, categories, subfolders, batch):
                 "type": "noul", "instructions": q["instructions"] % fid, "criteria": q["criteria"],
             }
 
-    answers = system_one(api_key, state, questions)
+    answers, usage = system_one(api_key, state, questions)
     for i, item in enumerate(batch):
         prefix = "f%d|" % i
         item["answers"] = {k[len(prefix):]: v for k, v in answers.items() if k.startswith(prefix)}
-    return batch
+    return {"requests": 1, "questions": len(questions), "input_tokens": usage.get("input_tokens", 0)}
 
 
 # ─── Policy: from judgments to a decision ─────────────────────────────────────
@@ -627,14 +629,34 @@ def safe_dest(dest_dir, filename):
 def move(path, dest_dir, run_id, note=""):
     print("  %s%-36s ← %s%s" % ("[dry] " if ARGS.dry else "", display(dest_dir) + "/", path.name,
                                  "  (%s)" % note if note else ""))
-    if ARGS.dry or path.parent == dest_dir:
-        return
+    if path.parent == dest_dir:
+        return False
+    if ARGS.dry:
+        return True
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = safe_dest(dest_dir, path.name)
     shutil.move(str(path), str(dest))
     with open(LOG, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({"run": run_id, "from": str(path), "to": str(dest),
                              "note": note}, ensure_ascii=False) + "\n")
+    return True
+
+
+def print_recap(moved, in_place, usage):
+    """What was done and what it cost."""
+    print("\n" + msg("recap_title"))
+    total = sum(moved.values())
+    print("  " + msg("recap_would_move" if ARGS.dry else "recap_moved", total))
+    for dest, n in sorted(moved.items(), key=lambda kv: (-kv[1], kv[0])):
+        print("    %4d → %s/" % (n, dest))
+    if in_place:
+        print("  " + msg("recap_in_place", in_place))
+    if usage["requests"]:
+        cost = usage["input_tokens"] / 1e6 * USD_PER_MILLION_INPUT_TOKENS
+        print("  " + msg("recap_jev", usage["requests"], usage["questions"],
+                         "{:,}".format(usage["input_tokens"]), "%.4f" % cost))
+    else:
+        print("  " + msg("recap_no_jev"))
 
 
 def undo():
@@ -723,11 +745,23 @@ def main():
             direct.append(it)
         elif api_key:
             judged.append(it)
+    moved, in_place = {}, 0
+    usage = {"requests": 0, "questions": 0, "input_tokens": 0}
+
+    def track(did_move, dest):
+        nonlocal in_place
+        if did_move:
+            moved[display(dest)] = moved.get(display(dest), 0) + 1
+        else:
+            in_place += 1
+
     if direct:
         print(msg("screenshots", len(direct)))
         for it in direct:
-            move(it["path"], shots_dir, run_id, msg("screenshot_note"))
+            track(move(it["path"], shots_dir, run_id, msg("screenshot_note")), shots_dir)
     if not judged:
+        if direct:
+            print_recap(moved, in_place, usage)
         return
 
     print(msg("analyzing", len(judged)))
@@ -744,7 +778,9 @@ def main():
     subfolders = build_subfolders(categories)
     batches = [judged[i:i + BATCH_SIZE] for i in range(0, len(judged), BATCH_SIZE)]
     with ThreadPoolExecutor(max_workers=8) as pool:
-        list(pool.map(lambda b: judge_batch(api_key, categories, subfolders, b), batches))
+        for spent in pool.map(lambda b: judge_batch(api_key, categories, subfolders, b), batches):
+            for k in usage:
+                usage[k] += spent[k]
 
     counts = {"keep": 0, "file": 0, "delete": 0}
     for it in judged:
@@ -758,11 +794,12 @@ def main():
             it["dest"] = folder_path(TO_DELETE)
         else:
             it["dest"] = folder_path(it["folder"]) / it["subfolder"]
-        move(it["path"], it["dest"], run_id, note)
+        track(move(it["path"], it["dest"], run_id, note), it["dest"])
 
-    print("\n" + msg("summary", counts["keep"], counts["file"], counts["delete"],
+    print_recap(moved, in_place, usage)
+    print("  " + msg("summary", counts["keep"], counts["file"], counts["delete"],
                      display(folder_path(TO_DELETE))))
-    print(msg("report", write_report(judged, run_id)))
+    print("  " + msg("report", write_report(judged, run_id)))
 
 
 if __name__ == "__main__":
