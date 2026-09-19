@@ -1,6 +1,6 @@
-# Clasificador de Escritorio — Desktop Classifier
+# Jev Tidy my Desktop
 
-**English** · [Español](README.es.md)
+**English** · [Español](README.es.md) · [Français](README.fr.md) · [Italiano](README.it.md)
 
 Tidies the macOS Desktop with [TypeSafe](https://docs.typesafe.ai). For every loose file it decides:
 
@@ -32,8 +32,8 @@ The script tidies **the folder that contains its own folder**, so clone it insid
 
 ```bash
 cd ~/Desktop
-git clone https://github.com/sirviejo/clasificador-escritorio.git clasificador
-cd clasificador
+git clone https://github.com/sirviejo/jev-tidy-my-desktop.git
+cd jev-tidy-my-desktop
 cp .env.example .env    # then fill in TYPESAFE_API_KEY
 ```
 
@@ -126,7 +126,7 @@ Cost: Jev charges for input tokens (USD 0.042 per million at the time of writing
 `com.clasificador.capturas.plist` is a LaunchAgent that runs `--screenshots-only` (no API) whenever the Desktop changes:
 
 ```bash
-sed "s#/Users/TU_USUARIO#$HOME#g" com.clasificador.capturas.plist > ~/Library/LaunchAgents/com.clasificador.capturas.plist
+sed -e "s#__DIR__#$PWD#g" -e "s#__DESKTOP__#$(dirname "$PWD")#g" com.clasificador.capturas.plist > ~/Library/LaunchAgents/com.clasificador.capturas.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.clasificador.capturas.plist
 ```
 

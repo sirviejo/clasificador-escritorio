@@ -7,18 +7,18 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>/Users/TU_USUARIO/Desktop/clasificador/clasificar.py</string>
+        <string>__DIR__/clasificar.py</string>
         <string>--screenshots-only</string>
     </array>
     <key>WatchPaths</key>
     <array>
-        <string>/Users/TU_USUARIO/Desktop</string>
+        <string>__DESKTOP__</string>
     </array>
     <key>ThrottleInterval</key>
     <integer>5</integer>
     <key>StandardOutPath</key>
-    <string>/Users/TU_USUARIO/Desktop/clasificador/watcher.log</string>
+    <string>__DIR__/watcher.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/TU_USUARIO/Desktop/clasificador/watcher.log</string>
+    <string>__DIR__/watcher.log</string>
 </dict>
 </plist>

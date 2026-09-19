@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-clasificar.py — macOS Desktop file classifier built on TypeSafe (Jev)
+Jev Tidy my Desktop — macOS Desktop file classifier built on TypeSafe's Jev
 
 For every loose file it decides:
   · folder       → destination (screenshots ALWAYS go to the screenshots folder;
@@ -241,7 +241,7 @@ def system_language():
 
 
 def parse_args():
-    ap = argparse.ArgumentParser(description="macOS Desktop file classifier built on TypeSafe.")
+    ap = argparse.ArgumentParser(description="Jev Tidy my Desktop — macOS Desktop file classifier built on TypeSafe.")
     ap.add_argument("--dry", action="store_true", help="show what would happen without moving anything")
     ap.add_argument("--with-content", "--con-contenido", action="store_true",
                     help="read each file (OCR for images, text of PDFs and documents) and send the "

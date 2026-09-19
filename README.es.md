@@ -1,6 +1,6 @@
-# Clasificador de Escritorio
+# Jev Tidy my Desktop
 
-[English](README.md) · **Español**
+[English](README.md) · **Español** · [Français](README.fr.md) · [Italiano](README.it.md)
 
 Ordena el Escritorio de macOS con [TypeSafe](https://docs.typesafe.ai). Para cada archivo decide:
 
@@ -30,8 +30,8 @@ El script ordena **la carpeta que contiene a su propia carpeta**, así que hay q
 
 ```bash
 cd ~/Desktop
-git clone https://github.com/sirviejo/clasificador-escritorio.git clasificador
-cd clasificador
+git clone https://github.com/sirviejo/jev-tidy-my-desktop.git
+cd jev-tidy-my-desktop
 cp .env.example .env    # y completá TYPESAFE_API_KEY
 ```
 
@@ -129,7 +129,7 @@ archivos cuestan centavos.
 el Escritorio:
 
 ```bash
-sed "s#/Users/TU_USUARIO#$HOME#g" com.clasificador.capturas.plist > ~/Library/LaunchAgents/com.clasificador.capturas.plist
+sed -e "s#__DIR__#$PWD#g" -e "s#__DESKTOP__#$(dirname "$PWD")#g" com.clasificador.capturas.plist > ~/Library/LaunchAgents/com.clasificador.capturas.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.clasificador.capturas.plist
 ```
 
