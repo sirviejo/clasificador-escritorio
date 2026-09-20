@@ -23,6 +23,7 @@ import csv
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,7 +38,7 @@ from pathlib import Path
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
-DESKTOP = SCRIPT_DIR.parent
+DEFAULT_ROOT = SCRIPT_DIR.parent   # the Desktop, when the project is cloned inside it
 LOCALES = SCRIPT_DIR / "locales"
 LOG = SCRIPT_DIR / "movimientos.jsonl"
 REPORTS = SCRIPT_DIR / "informes"
@@ -67,6 +68,7 @@ SCREENSHOT_PREFIXES = (
     "schermata", "registrazione schermo",
 )
 SCREENSHOT_XATTR = "com.apple.metadata:kMDItemIsScreenCapture"
+COPY_MARKER = re.compile(r"( \(\d+\)| copy( \d+)?| copia( \d+)?|-copy)$", re.IGNORECASE)
 
 SKIP_SUFFIXES = {".crdownload", ".download", ".part", ".tmp"}
 TEXT_SUFFIXES = {".txt", ".md", ".csv", ".json", ".html", ".xml", ".py", ".js",
@@ -223,7 +225,7 @@ def load_env():
         if old in env:
             env.setdefault(new, env[old])
     for k in ("TYPESAFE_API_KEY", "OWNER", "IGNORE", "LANGUAGE", "SCREENSHOTS_DIR",
-              "REVIEW_DIR", "TO_DELETE_DIR"):
+              "REVIEW_DIR", "TO_DELETE_DIR", "ROOT_DIR"):
         if os.environ.get(k):
             env[k] = os.environ[k]
     return env
@@ -248,13 +250,16 @@ def parse_args():
                     help="read each file (OCR for images, text of PDFs and documents) and send the "
                          "first characters to the API; without it only metadata is sent and "
                          "screenshots are not analyzed")
+    ap.add_argument("--root", "--raiz", metavar="DIR",
+                    help="directory to tidy, e.g. ~/Downloads (default: ROOT_DIR, or the folder that "
+                         "contains this project, normally the Desktop). Destination folders are created inside it")
     ap.add_argument("--folder", "--carpeta", metavar="DIR",
-                    help="analyze the loose files of this Desktop folder instead of the Desktop itself")
+                    help="analyze the loose files of this folder of the root instead of the root itself")
     ap.add_argument("--limit", "--limite", type=int, metavar="N", help="process only the first N files")
     ap.add_argument("--screenshots-only", "--solo-capturas", action="store_true",
                     help="only move screenshots; never calls the API")
     ap.add_argument("--screenshots-dir", "--capturas", metavar="DIR",
-                    help="where screenshots go: a folder name inside the Desktop or any path "
+                    help="where screenshots go: a folder name inside the root or any path "
                          "(e.g. ~/Pictures/Screenshots). Overrides SCREENSHOTS_DIR and the locale name")
     ap.add_argument("--lang", metavar="CODE", help="language of folder names and messages: "
                     + ", ".join(sorted(p.stem for p in LOCALES.glob("*.json"))) + " (default: system language)")
@@ -278,6 +283,10 @@ for fid, key in ((SCREENSHOTS, "SCREENSHOTS_DIR"), (REVIEW, "REVIEW_DIR"), (TO_D
 if ARGS.screenshots_dir:
     FOLDER_NAMES[SCREENSHOTS] = ARGS.screenshots_dir
 
+ROOT = Path(ARGS.root or ENV.get("ROOT_DIR") or DEFAULT_ROOT).expanduser().resolve()
+if not ROOT.is_dir():
+    sys.exit("Not a directory: %s" % ROOT)
+
 IGNORE = {n.strip() for n in ENV.get("IGNORE", "").split(",") if n.strip()}
 SKIP_NAMES = {"desktop.ini"} | IGNORE
 
@@ -290,7 +299,7 @@ def msg(key, *args):
 def folder_path(fid):
     """Destination directory for a folder id or a 'dir:<name>' option. Absolute or ~ paths are honored."""
     name = fid[len(DIR_PREFIX):] if fid.startswith(DIR_PREFIX) else FOLDER_NAMES[fid]
-    return DESKTOP / Path(name).expanduser()
+    return ROOT / Path(name).expanduser()
 
 
 def subfolder_name(fid, sub):
@@ -301,7 +310,7 @@ def subfolder_name(fid, sub):
 
 def display(path):
     try:
-        return str(path.relative_to(DESKTOP))
+        return str(path.relative_to(ROOT))
     except ValueError:
         return str(path)
 
@@ -358,8 +367,10 @@ def find_duplicates(files, roots):
                 except OSError:
                     hashes[q] = None
         twins = [q for q in same_size if hashes[q] and hashes[q] == hashes[p]]
-        # of two identical pending files, the alphabetically first one is kept
-        originals = [q for q in twins if q not in pending or str(q) < str(p)]
+        # of two identical pending files, keep the one that is not a "(1)" / "copy" and,
+        # between those, the more descriptive (longer) name
+        rank = lambda f: (bool(COPY_MARKER.search(f.stem)), -len(f.name), str(f))
+        originals = [q for q in twins if q not in pending or rank(q) < rank(p)]
         if originals:
             dupes[p] = min(originals, key=str)
     return dupes
@@ -462,10 +473,10 @@ def sample_names(directory, n):
 
 
 def build_categories():
-    """Predefined categories plus the user's own Desktop folders, described by their contents."""
+    """Predefined categories plus the user's own folders in the root, described by their contents."""
     criteria = {k: v for k, v in CATEGORIES.items() if k != OTHER}
     taken = {folder_path(fid) for fid in FOLDER_NAMES} | {SCRIPT_DIR}
-    for d in sorted(DESKTOP.iterdir()):
+    for d in sorted(ROOT.iterdir()):
         if not d.is_dir() or d.name.startswith(".") or d in taken or d.name in IGNORE:
             continue
         criteria[DIR_PREFIX + d.name] = {
@@ -498,6 +509,10 @@ def build_subfolders(categories):
 
 # ─── TypeSafe ─────────────────────────────────────────────────────────────────
 
+class RequestTooLarge(RuntimeError):
+    """The API rejected the request; with many folders a batch can exceed the token limit."""
+
+
 def system_one(api_key, state, questions):
     body = json.dumps({"model": MODEL, "state": state, "questions": questions}).encode()
     for attempt in range(5):
@@ -513,6 +528,8 @@ def system_one(api_key, state, questions):
             if e.code in (429, 529, 500, 502, 503) and attempt < 4:
                 time.sleep(2 ** attempt)
                 continue
+            if e.code in (400, 413, 422):
+                raise RequestTooLarge("TypeSafe HTTP %s: %s" % (e.code, e.read().decode(errors="replace")[:300]))
             raise RuntimeError("TypeSafe HTTP %s: %s" % (e.code, e.read().decode(errors="replace")[:300]))
         except urllib.error.URLError as e:
             if attempt < 4:
@@ -522,6 +539,19 @@ def system_one(api_key, state, questions):
 
 
 def judge_batch(api_key, categories, subfolders, batch):
+    """judge_files, halving the batch when the request is rejected as too large."""
+    try:
+        return judge_files(api_key, categories, subfolders, batch)
+    except RequestTooLarge:
+        if len(batch) == 1:
+            raise
+        half = len(batch) // 2
+        a = judge_batch(api_key, categories, subfolders, batch[:half])
+        b = judge_batch(api_key, categories, subfolders, batch[half:])
+        return {k: a[k] + b[k] for k in a}
+
+
+def judge_files(api_key, categories, subfolders, batch):
     """Every question about every file of the batch in a single request.
 
     Subfolder questions are speculative: one per possible folder, and the code
@@ -538,7 +568,7 @@ def judge_batch(api_key, categories, subfolders, batch):
             sub_folders = list(subfolders)
             questions[fid + "|folder"] = {
                 "type": "choice",
-                "instructions": "In which Desktop folder should the file described in `files.%s` be "
+                "instructions": "In which folder should the file described in `files.%s` be "
                                 "stored? Decide from its name, kind, origin and text when available." % fid,
                 "criteria": categories,
             }
@@ -699,9 +729,9 @@ def write_report(items, run_id):
 
 def source_dir():
     if not ARGS.folder:
-        return DESKTOP
-    src = (DESKTOP / Path(ARGS.folder).expanduser()).resolve()
-    inside = DESKTOP in src.parents or src == folder_path(SCREENSHOTS).resolve()
+        return ROOT
+    src = (ROOT / Path(ARGS.folder).expanduser()).resolve()
+    inside = ROOT in src.parents or src == folder_path(SCREENSHOTS).resolve()
     if not src.is_dir() or not inside:
         sys.exit(msg("bad_folder"))
     return src
@@ -769,7 +799,7 @@ def main():
         texts = extract_texts([it["path"] for it in judged])
         for it in judged:
             it["text"] = texts.get(it["path"])
-    roots = {DESKTOP, shots_dir} if shots_dir.is_dir() else {DESKTOP}
+    roots = {ROOT, shots_dir} if shots_dir.is_dir() else {ROOT}
     dupes = find_duplicates([it["path"] for it in judged], roots)
     for it in judged:
         it["duplicate_of"] = dupes.get(it["path"])

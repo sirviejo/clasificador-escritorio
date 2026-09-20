@@ -44,6 +44,7 @@ python3 clasificar.py --dry               # mostra cosa succederebbe, senza spos
 python3 clasificar.py                     # classifica e sposta
 python3 clasificar.py --with-content      # legge anche ogni file (vedi «Privacy»)
 python3 clasificar.py --folder Schermate  # analizza i file sciolti di una cartella della Scrivania
+python3 clasificar.py --root ~/Downloads     # riordina un’altra directory invece della Scrivania
 python3 clasificar.py --limit 20          # solo i primi 20 file
 python3 clasificar.py --screenshots-only  # sposta solo le schermate; non chiama mai l’API
 python3 clasificar.py --screenshots-dir "~/Pictures/Schermate"   # un’altra cartella per le schermate
@@ -113,6 +114,7 @@ tuo modo di lavorare.
 | `TYPESAFE_API_KEY` | Obbligatoria. |
 | `OWNER` | Facoltativa. Chi sei (`La Mia Azienda / Il Mio Nome`), per distinguere fatture emesse e ricevute. |
 | `LANGUAGE` | Facoltativa. `en`, `es`, `fr` o `it`. Per impostazione predefinita, la lingua di sistema. |
+| `ROOT_DIR` | Facoltativa. Directory da riordinare al posto di quella che contiene questo progetto (`~/Downloads`). `--root` ha la precedenza. |
 | `SCREENSHOTS_DIR` | Facoltativa. Cartella delle schermate: un nome dentro la Scrivania o qualsiasi percorso (`~/Pictures/Schermate`). `--screenshots-dir` ha la precedenza. |
 | `REVIEW_DIR`, `TO_DELETE_DIR` | Facoltative. Rinominano le cartelle di revisione e dei candidati all’eliminazione. |
 | `IGNORE` | Facoltativa. File o cartelle della Scrivania, separati da virgola, da non toccare né proporre come destinazione. |

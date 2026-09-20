@@ -44,6 +44,7 @@ python3 clasificar.py --dry               # montre ce qui se passerait, sans rie
 python3 clasificar.py                     # classe et déplace
 python3 clasificar.py --with-content      # lit aussi chaque fichier (voir « Confidentialité »)
 python3 clasificar.py --folder Captures   # analyse les fichiers isolés d’un dossier du Bureau
+python3 clasificar.py --root ~/Downloads     # range un autre répertoire que le Bureau
 python3 clasificar.py --limit 20          # seulement les 20 premiers fichiers
 python3 clasificar.py --screenshots-only  # déplace seulement les captures ; n’appelle jamais l’API
 python3 clasificar.py --screenshots-dir "~/Pictures/Captures"   # autre dossier pour les captures
@@ -113,6 +114,7 @@ adaptez-les à votre façon de travailler.
 | `TYPESAFE_API_KEY` | Obligatoire. |
 | `OWNER` | Facultatif. Qui vous êtes (`Ma Société / Mon Nom`), pour distinguer factures émises et reçues. |
 | `LANGUAGE` | Facultatif. `en`, `es`, `fr` ou `it`. Par défaut, la langue du système. |
+| `ROOT_DIR` | Facultatif. Répertoire à ranger à la place de celui qui contient ce projet (`~/Downloads`). `--root` est prioritaire. |
 | `SCREENSHOTS_DIR` | Facultatif. Dossier des captures : un nom dans le Bureau ou n’importe quel chemin (`~/Pictures/Captures`). `--screenshots-dir` est prioritaire. |
 | `REVIEW_DIR`, `TO_DELETE_DIR` | Facultatif. Renommer les dossiers de vérification et de candidats à la suppression. |
 | `IGNORE` | Facultatif. Fichiers ou dossiers du Bureau, séparés par des virgules, à ne pas toucher ni proposer comme destination. |

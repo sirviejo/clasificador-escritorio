@@ -44,6 +44,7 @@ python3 clasificar.py --dry               # show what would happen, move nothing
 python3 clasificar.py                     # classify and move
 python3 clasificar.py --with-content      # also read each file (see "Privacy")
 python3 clasificar.py --folder Screenshots  # analyze the loose files of a Desktop folder
+python3 clasificar.py --root ~/Downloads     # tidy another directory instead of the Desktop
 python3 clasificar.py --limit 20          # only the first 20 files
 python3 clasificar.py --screenshots-only  # only move screenshots; never calls the API
 python3 clasificar.py --screenshots-dir "~/Pictures/Screenshots"   # another folder for screenshots
@@ -112,6 +113,7 @@ contain), and so are existing subfolders. The predefined categories and subfolde
 | `TYPESAFE_API_KEY` | Required. |
 | `OWNER` | Optional. Who you are (`My Company / My Name`), to tell issued invoices from received ones. |
 | `LANGUAGE` | Optional. `en`, `es`, `fr` or `it`. Defaults to the system language. |
+| `ROOT_DIR` | Optional. Directory to tidy instead of the one that contains this project (`~/Downloads`). `--root` takes precedence. |
 | `SCREENSHOTS_DIR` | Optional. Screenshots folder: a name inside the Desktop or any path (`~/Pictures/Screenshots`). `--screenshots-dir` takes precedence. |
 | `REVIEW_DIR`, `TO_DELETE_DIR` | Optional. Rename the review and deletion-candidates folders. |
 | `IGNORE` | Optional. Comma-separated Desktop files or folders to leave alone and never offer as a destination. |

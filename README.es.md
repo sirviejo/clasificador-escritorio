@@ -42,6 +42,7 @@ python3 clasificar.py --dry               # muestra qué haría, sin mover nada
 python3 clasificar.py                     # clasifica y mueve
 python3 clasificar.py --with-content      # además lee el archivo (ver "Privacidad")
 python3 clasificar.py --folder Capturas   # analiza los archivos sueltos de una carpeta del Escritorio
+python3 clasificar.py --root ~/Downloads     # ordena otro directorio en vez del Escritorio
 python3 clasificar.py --limit 20          # solo los primeros 20 archivos
 python3 clasificar.py --screenshots-only  # solo mueve capturas; no usa la API
 python3 clasificar.py --screenshots-dir "~/Pictures/Capturas"   # otra carpeta para las capturas
@@ -113,6 +114,7 @@ igual que las subcarpetas existentes. Las categorías y subcarpetas predefinidas
 | `TYPESAFE_API_KEY` | Obligatoria. |
 | `OWNER` | Opcional. Quién sos (`Mi Empresa / Mi Nombre`), para distinguir facturas emitidas de recibidas. |
 | `LANGUAGE` | Opcional. `en`, `es`, `fr` o `it`. Por defecto, el idioma del sistema. |
+| `ROOT_DIR` | Opcional. Directorio a ordenar en vez del que contiene este proyecto (`~/Downloads`). `--root` tiene prioridad. |
 | `SCREENSHOTS_DIR` | Opcional. Carpeta de capturas: un nombre dentro del Escritorio o cualquier ruta (`~/Pictures/Capturas`). `--screenshots-dir` tiene prioridad. |
 | `REVIEW_DIR`, `TO_DELETE_DIR` | Opcional. Otro nombre para las carpetas de revisión y de candidatos a borrar. |
 | `IGNORE` | Opcional. Archivos o carpetas del Escritorio, separados por coma, que no se tocan ni se ofrecen como destino. |
